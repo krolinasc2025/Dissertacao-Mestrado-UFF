@@ -1,0 +1,108 @@
+import cv2
+import json
+import numpy as np
+
+# Lista para armazenar as regiões
+parking_regions = []
+current_region = []
+
+def draw_parking_regions(event, x, y, flags, param):
+    global current_region, parking_regions
+    if event == cv2.EVENT_LBUTTONDOWN:  # Clique esquerdo para adicionar pontos
+        current_region.append((x, y))
+    elif event == cv2.EVENT_RBUTTONDOWN:  # Clique direito para finalizar a região
+        if len(current_region) > 2:  # Pelo menos um polígono
+            region_id = len(parking_regions) + 1
+            parking_regions.append({"id": region_id, "region": current_region})
+            current_region = []
+        else:
+            print("Desenhe uma região com pelo menos 3 pontos.")
+    elif event == cv2.EVENT_MBUTTONDOWN:  # Clique do meio para salvar e sair
+        save_regions_to_json("frame_vagas.json")
+        print("Regiões salvas. Saindo...")
+        cv2.destroyAllWindows()
+
+def save_regions_to_json2(destino):
+    with open(destino, "w") as f:
+        json.dump(parking_regions, f, indent=4)
+    print(f"Arquivo {destino} salvo com sucesso!")
+
+def save_regions_to_json(destino):
+    # Converter tuplas para listas
+    regions_to_save = [
+        {"id": r["id"], "region": [list(p) for p in r["region"]]}
+        for r in parking_regions
+    ]
+    with open(destino, "w") as f:
+        json.dump(regions_to_save, f, indent=4)
+    print(f"Arquivo {destino} salvo com sucesso!")
+
+
+# ==============================
+# 1. ABRIR VÍDEO E EXTRAIR FRAME
+# ==============================
+
+video_path = "C:\\Users\\samue\\Desktop\\Mestrado\\VideoEstacionamento\\video_diurno01.mp4"  # Substitua aqui
+output_frame_path = "C:\\Users\\samue\\Desktop\\Mestrado\\FrameExtraido\\frame_video_diurno01.jpg"
+
+cap = cv2.VideoCapture(video_path)
+if not cap.isOpened():
+    print("Erro ao abrir o vídeo.")
+    exit()
+
+frame = None
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("Fim do vídeo ou erro.")
+        break
+
+    cv2.imshow("Video", frame)
+    key = cv2.waitKey(1) & 0xFF
+
+    if key in [ord('w'), ord('W')]:
+        # Redimensionar e salvar
+        resized_frame = cv2.resize(frame, (1600, 900))
+        cv2.imwrite(output_frame_path, resized_frame)
+        print(f"Frame salvo como {output_frame_path}")
+        break
+
+    elif key == ord('q'):
+        print("Encerrado pelo usuário.")
+        cap.release()
+        cv2.destroyAllWindows()
+        exit()
+
+cap.release()
+cv2.destroyAllWindows()
+
+# ==============================
+# 2. ABRIR FRAME E DELIMITAR VAGAS
+# ==============================
+
+image = cv2.imread(output_frame_path)
+assert image is not None, "Erro ao carregar o frame salvo."
+
+cv2.namedWindow("Select Parking Regions")
+cv2.setMouseCallback("Select Parking Regions", draw_parking_regions)
+
+while True:
+    temp_image = image.copy()
+
+    for region in parking_regions:
+        pts = region["region"]
+        cv2.polylines(temp_image, [np.array(pts, np.int32)], isClosed=True, color=(0, 255, 0), thickness=2)
+        cv2.putText(temp_image, f"ID: {region['id']}", (pts[0][0], pts[0][1] - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+    if len(current_region) > 1:
+        cv2.polylines(temp_image, [np.array(current_region, np.int32)], isClosed=False, color=(0, 0, 255), thickness=2)
+
+    cv2.imshow("Select Parking Regions", temp_image)
+    key = cv2.waitKey(1) & 0xFF
+
+    if key in [ord('q'), ord('w')]:
+        save_regions_to_json("C:\\Users\\samue\\Desktop\\Mestrado\\FrameExtraido\\frame_video_diurno01.json")
+        break
+
+cv2.destroyAllWindows()
